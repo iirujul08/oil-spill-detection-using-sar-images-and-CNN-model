@@ -1,5 +1,4 @@
 # 🛢️ Oil Spill Detection — Mini Project
-### 2nd Year Engineering | Python + TensorFlow + Real SAR Images
 
 ---
 
@@ -89,12 +88,10 @@ This installs: TensorFlow, OpenCV, NumPy, Scikit-learn, Matplotlib, Seaborn.
 Split your 800+ images into **two folders**:
 
 ```
-dataset/train/oil_spill/    ← put ~650-700 spill images here
-dataset/test/oil_spill/     ← put ~100-150 spill images here
+dataset/train/oil_spill/    
+dataset/test/oil_spill/     
 ```
 
-**Tip:** Just manually cut and paste about 15–20% of your images into the test folder.  
-Example: if you have 800 images total → 650 in train, 150 in test.
 
 ---
 
