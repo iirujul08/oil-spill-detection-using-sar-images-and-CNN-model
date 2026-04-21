@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OilSense — SAR Oil Spill Detection</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0c0f;
+      --surface: #111418;
+      --border: #1e2530;
+      --accent: #00e5c0;
+      --accent-dim: #00b89a;
+      --warn: #ff4d4d;
+      --safe: #00e5c0;
+      --text: #e8edf2;
+      --muted: #5a6677;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    html,
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Grid noise texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 229, 192, 0.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout ── */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 32px 0 48px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 56px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border: 1.5px solid var(--accent);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .logo-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .logo-name {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .logo-name span {
+      color: var(--accent);
+    }
+
+    .badge {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 52px;
+    }
+
+    .hero h1 {
+      font-family: var(--mono);
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: 0.95rem;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 520px;
+    }
+
+    /* ── Upload Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      margin-bottom: 28px;
+    }
+
+    .upload-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      padding: 52px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(0, 229, 192, 0.04);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-icon {
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 18px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      transition: border-color 0.2s;
+    }
+
+    .upload-zone:hover .upload-icon {
+      border-color: var(--accent);
+    }
+
+    .upload-zone:hover .upload-icon svg path {
+      stroke: var(--accent);
+    }
+
+    .upload-icon svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .upload-zone h3 {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .upload-zone p {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* Preview */
+    .preview-area {
+      display: none;
+      align-items: center;
+      gap: 20px;
+      padding: 16px;
+      background: rgba(0, 229, 192, 0.04);
+      border: 1px solid rgba(0, 229, 192, 0.15);
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+
+    .preview-area.visible {
+      display: flex;
+    }
+
+    .preview-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      background: var(--border);
+    }
+
+    .preview-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .preview-name {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .preview-size {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .remove-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .remove-btn:hover {
+      color: var(--warn);
+      background: rgba(255, 77, 77, 0.08);
+    }
+
+    /* ── Analyze Button ── */
+    .analyze-btn {
+      width: 100%;
+      margin-top: 24px;
+      padding: 16px;
+      background: var(--accent);
+      color: #000;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .analyze-btn:hover {
+      background: var(--accent-dim);
+    }
+
+    .analyze-btn:active {
+      transform: scale(0.99);
+    }
+
+    .analyze-btn:disabled {
+      background: var(--border);
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    .analyze-btn.loading .spinner {
+      display: block;
+    }
+
+    .analyze-btn.loading .btn-text {
+      opacity: 0.7;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Result Card ── */
+    .result-card {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 36px;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .result-card.visible {
+      display: block;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .result-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .result-verdict {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .verdict-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    .verdict-dot.spill {
+      background: var(--warn);
+      color: var(--warn);
+    }
+
+    .verdict-dot.clean {
+      background: var(--safe);
+      color: var(--safe);
+    }
+
+    .verdict-text {
+      font-family: var(--mono);
+      font-size: clamp(1.3rem, 3vw, 1.9rem);
+      font-weight: 700;
+    }
+
+    .verdict-text.spill {
+      color: var(--warn);
+    }
+
+    .verdict-text.clean {
+      color: var(--safe);
+    }
+
+    /* Confidence bar */
+    .conf-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .conf-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .conf-value {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    .conf-bar-track {
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .conf-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 0%;
+    }
+
+    .conf-bar-fill.spill {
+      background: var(--warn);
+    }
+
+    .conf-bar-fill.clean {
+      background: var(--safe);
+    }
+
+    /* Meta row */
+    .meta-row {
+      display: flex;
+      gap: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .meta-item {}
+
+    .meta-key {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .meta-val {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--text);
+    }
+
+    /* ── Error ── */
+    .error-box {
+      display: none;
+      padding: 14px 18px;
+      background: rgba(255, 77, 77, 0.07);
+      border: 1px solid rgba(255, 77, 77, 0.25);
+      border-radius: 10px;
+      color: var(--warn);
+      font-size: 0.83rem;
+      margin-top: 16px;
+    }
+
+    .error-box.visible {
+      display: block;
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    footer p {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 520px) {
+      .card {
+        padding: 24px 18px;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="8" stroke="#00e5c0" stroke-width="1.5" />
+            <path d="M8 14c1-2 6-4 8-1" stroke="#00e5c0" stroke-width="1.5" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="2" fill="#00e5c0" opacity="0.5" />
+          </svg>
+        </div>
+        <span class="logo-name">Oil<span>Sense</span></span>
+      </div>
+      <span class="badge">SAR · CNN Model</span>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <h1>Detect <em>Oil Spills</em><br />from SAR Imagery</h1>
+      <p>Upload a Synthetic Aperture Radar (SAR) image.</p>
+    </section>
+
+    <!-- Upload Card -->
+    <div class="card">
+      <div class="upload-zone" id="dropzone">
+        <input type="file" id="fileInput" accept="image/*,.tif,.tiff" />
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 16V8M12 8l-3 3M12 8l3 3" stroke="#5a6677" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1" stroke="#5a6677" stroke-width="1.5"
+              stroke-linecap="round" />
+          </svg>
+        </div>
+        <h3>Drop SAR image here</h3>
+        <p>or click to browse — PNG, JPG, TIFF supported</p>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-area" id="previewArea">
+        <img class="preview-thumb" id="previewThumb" src="" alt="preview" />
+        <div class="preview-info">
+          <div class="preview-name" id="previewName">—</div>
+          <div class="preview-size" id="previewSize">—</div>
+        </div>
+        <button class="remove-btn" id="removeBtn" title="Remove">✕</button>
+      </div>
+
+      <div class="error-box" id="errorBox"></div>
+
+      <button class="analyze-btn" id="analyzeBtn" disabled>
+        <span class="spinner"></span>
+        <span class="btn-text">Analyze Image</span>
+      </button>
+    </div>
+
+    <!-- Result Card -->
+    <div class="result-card" id="resultCard">
+      <div class="result-label">// Prediction Result</div>
+
+      <div class="result-verdict">
+        <div class="verdict-dot" id="verdictDot"></div>
+        <div class="verdict-text" id="verdictText">—</div>
+      </div>
+
+      <div class="conf-row">
+        <span class="conf-label">Confidence</span>
+        <span class="conf-value" id="confValue">—</span>
+      </div>
+      <div class="conf-bar-track">
+        <div class="conf-bar-fill" id="confBar"></div>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <div class="meta-key">Filename</div>
+          <div class="meta-val" id="metaFile">—</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-key">Model</div>
+          <div class="meta-val">CNN v1.0</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-key">Time</div>
+          <div class="meta-val" id="metaTime">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>OilSense &mdash; SAR Oil Spill Detection</p>
+      <p>Powered by Flask + CNN </p>
+    </footer>
+  </div>
+
+  <script>
+    // ── Elements
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const previewArea = document.getElementById('previewArea');
+    const previewThumb = document.getElementById('previewThumb');
+    const previewName = document.getElementById('previewName');
+    const previewSize = document.getElementById('previewSize');
+    const removeBtn = document.getElementById('removeBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const errorBox = document.getElementById('errorBox');
+    const resultCard = document.getElementById('resultCard');
+    const verdictDot = document.getElementById('verdictDot');
+    const verdictText = document.getElementById('verdictText');
+    const confValue = document.getElementById('confValue');
+    const confBar = document.getElementById('confBar');
+    const metaFile = document.getElementById('metaFile');
+    const metaTime = document.getElementById('metaTime');
+
+    // ── Flask backend URL — change if needed
+    const BACKEND_URL = 'http://127.0.0.1:5000/predict';
+
+    let selectedFile = null;
+
+    // ── Drag & Drop
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault(); dropzone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      previewName.textContent = file.name;
+      previewSize.textContent = formatBytes(file.size);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = e => { previewThumb.src = e.target.result; };
+        reader.readAsDataURL(file);
+      } else {
+        previewThumb.src = '';
+      }
+      previewArea.classList.add('visible');
+      analyzeBtn.disabled = false;
+      hideError();
+      hideResult();
+    }
+
+    removeBtn.addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      previewArea.classList.remove('visible');
+      analyzeBtn.disabled = true;
+      hideError();
+      hideResult();
+    });
+
+    // ── Analyze
+    analyzeBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      setLoading(true);
+      hideError();
+      hideResult();
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const t0 = performance.now();
+
+      try {
+        const res = await fetch(BACKEND_URL, { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const data = await res.json();
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+        showResult(data, elapsed);
+      } catch (err) {
+        showError(err.message || 'Could not reach backend. Is Flask running?');
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // ── UI helpers
+    function setLoading(on) {
+      analyzeBtn.classList.toggle('loading', on);
+      analyzeBtn.disabled = on;
+    }
+
+    function showResult(data, elapsed) {
+      /*
+        Expected Flask response shape:
+        { "prediction": "Oil Spill" | "No Oil Spill", "confidence": 0.94 }
+      */
+      const isSpill = (data.prediction || '').toLowerCase().includes('oil spill') &&
+        !(data.prediction || '').toLowerCase().includes('no');
+      const conf = parseFloat(data.confidence ?? 0);
+
+      verdictDot.className = 'verdict-dot ' + (isSpill ? 'spill' : 'clean');
+      verdictText.className = 'verdict-text ' + (isSpill ? 'spill' : 'clean');
+      verdictText.textContent = isSpill ? 'Oil Spill Detected' : 'No Oil Spill';
+
+      confValue.textContent = (conf * 100).toFixed(1) + '%';
+      confBar.className = 'conf-bar-fill ' + (isSpill ? 'spill' : 'clean');
+      setTimeout(() => { confBar.style.width = (conf * 100) + '%'; }, 50);
+
+      metaFile.textContent = selectedFile?.name ?? '—';
+      metaTime.textContent = elapsed + 's';
+
+      resultCard.classList.add('visible');
+    }
+
+    function hideResult() { resultCard.classList.remove('visible'); }
+
+    function showError(msg) {
+      errorBox.textContent = '⚠ ' + msg;
+      errorBox.classList.add('visible');
+    }
+    function hideError() { errorBox.classList.remove('visible'); }
+
+    function formatBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1048576).toFixed(1) + ' MB';
+    }
+  </script>
+</body>
+
+</html>
